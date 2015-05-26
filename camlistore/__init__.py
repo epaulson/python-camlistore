@@ -9,3 +9,7 @@ from camlistore.connection import (
 from camlistore.blobclient import (
     Blob,
 )
+
+from camlistore.schema import (
+    Schema,
+)

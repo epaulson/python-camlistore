@@ -1,6 +1,8 @@
 
 import json
 import pkg_resources
+import os
+import sys
 
 
 version = pkg_resources.get_distribution("camlistore").version
@@ -35,12 +37,16 @@ class Connection(object):
         http_session=None,
         blob_root=None,
         search_root=None,
-        sign_root=None,
+        sign_handler=None,
+        public_key=None,
+        client_config=None,
     ):
         self.http_session = http_session
         self.blob_root = blob_root
         self.search_root = search_root
-        self.sign_root = sign_root
+        self.sign_handler = sign_handler
+        self.public_key = public_key
+        self.client_config = client_config
 
         from camlistore.blobclient import BlobClient
         self.blobs = BlobClient(
@@ -52,6 +58,13 @@ class Connection(object):
         self.searcher = SearchClient(
             http_session=http_session,
             base_url=search_root,
+        )
+
+        from camlistore.jsonsign import JsonSign
+        self.jsonsign = JsonSign(
+            http_session=http_session,
+            sign_handler=sign_handler,
+            public_key=public_key
         )
 
 
@@ -101,14 +114,29 @@ def _connect(base_url, http_session):
     if "searchRoot" in raw_config:
         search_root = urljoin(config_url, raw_config["searchRoot"])
 
-    if "jsonSignRoot" in raw_config:
-        sign_root = urljoin(config_url, raw_config["jsonSignRoot"])
+    if "signing" in raw_config:
+        if "signHandler" in raw_config["signing"]:
+          sign_handler = urljoin(config_url, raw_config["signing"]["signHandler"])
+        if "publicKeyBlobRef" in raw_config["signing"]:
+          public_key = raw_config["signing"]["publicKeyBlobRef"]
+
+
+    client_config = None
+
+    config_dir_path = os.environ.get("CAMLI_CONFIG_DIR", os.path.join(os.path.expanduser('~'), ".config","camlistore"))
+    client_config_file = os.path.join(config_dir_path, "client-config.json")
+    
+    if os.path.isfile(client_config_file):
+        with open(client_config_file) as f:
+            client_config = json.load(f)
 
     return Connection(
         http_session=http_session,
         blob_root=blob_root,
         search_root=search_root,
-        sign_root=sign_root,
+        sign_handler=sign_handler,
+        public_key=public_key,
+        client_config=client_config,
     )
 
 
@@ -125,6 +153,20 @@ def connect(base_url):
     will be extended with some options for configuring authentication.
     """
     import requests
+    import logging
+
+   # these two lines enable debugging at httplib level (requests->urllib3->httplib)
+   # you will see the REQUEST, including HEADERS and DATA, and RESPONSE with HEADERS but without DATA.
+   # the only thing missing will be the response.body which is not logged.
+    if False:
+      import httplib
+      httplib.HTTPConnection.debuglevel = 1
+
+      logging.basicConfig() # you need to initialize logging, otherwise you will not see anything from requests
+      logging.getLogger().setLevel(logging.DEBUG)
+      requests_log = logging.getLogger("requests.packages.urllib3")
+      requests_log.setLevel(logging.DEBUG)
+      requests_log.propagate = True
 
     http_session = requests.Session()
     http_session.trust_env = False

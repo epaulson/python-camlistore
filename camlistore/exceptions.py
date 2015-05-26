@@ -47,3 +47,9 @@ class HashMismatchError(Exception):
     value.
     """
     pass
+
+class MissingFieldError(Exception):
+    """
+    There was a missing JSON field in a schema blob
+    """
+    pass
