@@ -1,4 +1,5 @@
 import json
+import camlistore.blobclient
 
 class Schema(object):
     """
@@ -9,45 +10,39 @@ class Schema(object):
     type of metadata the blob contains.
    
     See http://camlistore.org/docs/schema for more 
+
+    This implementation doesn't really do anything special with thus far, and
+    is really just a wrapper around a dict, with a dump-to-a-blob helper
+    Someday, maybe actually use this as a class hierarchy
+
+    To use:
+    import camlistore
+
+    conn = camlistore.connect("http://localhost:3179/")
+
+    schemablob = camlistore.Schema(1, "test")
+    schemablob.add_attribute("foo", "zot")
+
+    signed = conn.jsonsign.sign_schema(schemablob)
+
+    print signed
     """
-    def parsed_json_helper(self):
-        # Just toss a TypeError here if passed something not JSON
-        self._parsed_json = json.loads(self.blob.data)
-        if type(self._parsed_json) is not dict or \
-            'camliVersion' not in self._parsed_json or \
-            'camliType' not in self._parsed_json or \
-            self._parsed_json['camliVersion'] != 1:
-            from camlistore.exceptions import MissingFieldError
-            raise MissingFieldError
-             
 
-    def __init__(self, blob):
-        self.blob = blob 
-        self.parsed_json_helper()
+    def __init__(self, version=1, type="AnyBlob"):
+        self._data = {}
+        self._blob = None
+        self._data['camliVersion'] = version
+        self._data['camliType'] = type
 
-    #
-    # this needs to be actually thought out - if a schema element changes, the 
-    # underlying  blob has to change, too. I'm not sure what the right interface 
-    # into a schema should be - twiddling with the JSON directly, or treating it 
-    # always as a dictionary that's only serialized to JSON at the last possible
-    # minute. 
-    #
-    # my original thinking was some magic watching ala the camlistore.Blob, 
-    # so if the parsed json changes, update the string, 
-    # or if the string changes, reparse the dictionary.
-    # at the moment, the only thing I want this for is to add camliSigner
-    # For now, just json.dumps back to the string, and assume no one
-    # changes the blob.data on us
-    #
-    #
     def add_attribute(self, k, v):
-        self._parsed_json[k]=v
-        self.blob.data = json.dumps(self.parsed_json)
-        self.parsed_json_helper()
+       self._data[k] = v
+    
+    def has_attribute(self, k):
+       if k in self._data:
+          return self._data[k]
+       return None
 
     @property
-    def parsed_json(self):
-         if self._parsed_json is None:
-            self.parsed_json_helper()
-         return self._parsed_json
+    def blob(self):
+         return camlistore.blobclient.Blob(json.dumps(self._data))
 

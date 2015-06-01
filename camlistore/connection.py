@@ -38,6 +38,8 @@ class Connection(object):
         blob_root=None,
         search_root=None,
         sign_handler=None,
+        public_key_ref=None,
+        public_key_id=None,
         public_key=None,
         client_config=None,
     ):
@@ -45,6 +47,8 @@ class Connection(object):
         self.blob_root = blob_root
         self.search_root = search_root
         self.sign_handler = sign_handler
+        self.public_key_ref = public_key_ref
+        self.public_key_id = public_key_id
         self.public_key = public_key
         self.client_config = client_config
 
@@ -64,7 +68,10 @@ class Connection(object):
         self.jsonsign = JsonSign(
             http_session=http_session,
             sign_handler=sign_handler,
-            public_key=public_key
+            public_key_ref=public_key_ref,
+            public_key_id=public_key_id,
+            public_key=public_key,
+            client_config=client_config
         )
 
 
@@ -118,23 +125,45 @@ def _connect(base_url, http_session):
         if "signHandler" in raw_config["signing"]:
           sign_handler = urljoin(config_url, raw_config["signing"]["signHandler"])
         if "publicKeyBlobRef" in raw_config["signing"]:
-          public_key = raw_config["signing"]["publicKeyBlobRef"]
+          public_key_ref = raw_config["signing"]["publicKeyBlobRef"]
+        if "publicKeyId" in raw_config["signing"]:
+          public_key_id = raw_config["signing"]["publicKeyId"]
+        if "publicKey" in raw_config["signing"]:
+          public_key_url = raw_config["signing"]["publicKey"]
 
 
-    client_config = None
+    public_key_resp = http_session.get(urljoin(base_url, public_key_url))
+    if public_key_resp.status_code != 200:
+        from camlistore.exceptions import NotFoundError
+        raise NotFoundError(
+            "Public Key request returned %i %s" % (
+                public_key_resp.status_code,
+                public_key_resp.reason,
+            )
+        )
+    public_key = public_key_resp.text
 
+    client_config = {}
     config_dir_path = os.environ.get("CAMLI_CONFIG_DIR", os.path.join(os.path.expanduser('~'), ".config","camlistore"))
     client_config_file = os.path.join(config_dir_path, "client-config.json")
-    
+   
     if os.path.isfile(client_config_file):
         with open(client_config_file) as f:
             client_config = json.load(f)
+
+    secretRingPath = os.path.join(config_dir_path, "identity-secring.gpg")
+    if 'identitySecretRing' in client_config:
+      secretRingPath = client_config['identitySecretRing']
+    secretRingPath = os.environ.get("CAMLI_SECRET_RING", secretRingPath)
+    client_config['identitySecretRing'] = secretRingPath
 
     return Connection(
         http_session=http_session,
         blob_root=blob_root,
         search_root=search_root,
         sign_handler=sign_handler,
+        public_key_ref=public_key_ref,
+        public_key_id=public_key_id,
         public_key=public_key,
         client_config=client_config,
     )

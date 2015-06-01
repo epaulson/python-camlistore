@@ -26,6 +26,7 @@ setup(
     install_requires=[
         "requests",
         "python-dateutil",
+        "python-gnupg",
     ],
     classifiers=[
         "License :: OSI Approved :: MIT License",
